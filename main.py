@@ -1,7 +1,8 @@
+import random
+from string import ascii_uppercase
 from flask import Flask, render_template, request, session, redirect, url_for
 from flask_socketio import join_room, leave_room, send, SocketIO
-import random
-from string import ascii_letters
+
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "are_you_my_mummy_or_daddy"
@@ -14,7 +15,7 @@ def generate_unique_code(length):
     while True:
         code = ""
         for _ in range(length):
-            code += random.choice(ascii_letters)
+            code += random.choice(ascii_uppercase)
 
         if code not in rooms:
             break
@@ -62,13 +63,30 @@ def room():
     if room is None or session.get("name") is None or room not in rooms:
         return redirect(url_for("room"))
 
-    return render_template("room.html")
+    return render_template("room.html", code=room, messages=rooms[room]["messages"])
+
+
+@socketio.on("message")
+def message(data):
+    room = session.get("room")
+    if room not in rooms:
+        leave_room(room)
+        return
+
+    content = {
+        "name": session.get("name"),
+        "message": data["data"],
+    }
+    send(content, to=room)
+    rooms[room]["messages"].append(content)
+    print(f"{session.get('name')} said: {data['data']}")
 
 
 @socketio.on("connect")
 def connect(auth):
     room = session.get("room")
     name = session.get("name")
+
     if not room or not name:
         return
     if room not in rooms:
